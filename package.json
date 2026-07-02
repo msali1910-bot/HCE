@@ -19,7 +19,10 @@
     "productName": "Hydraulic P&ID",
     "files": [
       "main.js",
-      "app/**/*"
+      "index.html",
+      "app.js",
+      "engine.js",
+      "style.css"
     ],
     "directories": {
       "output": "dist"
