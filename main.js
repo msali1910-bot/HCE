@@ -15,7 +15,7 @@ function createWindow() {
   });
 
   Menu.setApplicationMenu(null);
-  win.loadFile(path.join(__dirname, 'app', 'index.html'));
+  win.loadFile(path.join(__dirname, 'index.html'));
 
   // Uncomment for debugging:
   // win.webContents.openDevTools();
