@@ -1,0 +1,36 @@
+{
+  "name": "hydraulic-pid",
+  "productName": "Hydraulic P&ID",
+  "version": "1.0.0",
+  "description": "Professional plumbing / hydraulic schematic application",
+  "main": "main.js",
+  "author": "Saeed",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.mep.hydraulicpid",
+    "productName": "Hydraulic P&ID",
+    "files": [
+      "main.js",
+      "app/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}
