@@ -616,30 +616,184 @@ if(rtToggle)rtToggle.onclick=function(){
   body.style.display=hidden?'':'none';this.textContent=hidden?'▲ Hide':'▼ Show';
 };
 
-// ── EXPORT PNG ────────────────────────────────────────────
+// ── EXPORT PDF REPORT ────────────────────────────────────────
 document.getElementById('bexport').onclick=function(){
-  const W2=900,H2=1200,off=document.createElement('canvas');off.width=W2;off.height=H2;
-  const c2=off.getContext('2d'),dark=isDark();
-  c2.fillStyle=dark?'#0b0c0e':'#ffffff';c2.fillRect(0,0,W2,H2);
-  const g=c2.createLinearGradient(0,0,W2,0);
-  g.addColorStop(0,dark?'#1a3a6e':'#e7f5ff');g.addColorStop(1,dark?'#0b0c0e':'#ffffff');
-  c2.fillStyle=g;c2.fillRect(0,0,W2,72);
-  c2.fillStyle='#1971c2';c2.fillRect(0,0,5,72);
-  c2.font='bold 22px Segoe UI,sans-serif';c2.fillStyle=dark?'#e2e8f0':'#1e293b';c2.textAlign='left';c2.textBaseline='middle';
+  if(typeof window.jspdf==='undefined'){showFlash('✗ PDF library not loaded','#e03131');return;}
+  const { jsPDF }=window.jspdf;
+  const doc=new jsPDF('p','mm','a4');
+  const PW=210,PH=297,MX=14;
+  const BLUE=[25,113,194],DARK=[30,41,59],GREY=[100,116,139],LGREY=[241,243,245];
+  const GREEN=[47,158,68],ORANGE=[240,140,0],RED=[224,49,49];
   const cur=projectTabs.find(p=>p.id===activeProjId);
-  c2.fillText('Hydraulic P&ID — '+(cur?.name||'Report'),24,28);
-  c2.font='12px Segoe UI,sans-serif';c2.fillStyle='#64748b';c2.fillText('Generated: '+new Date().toLocaleString(),24,52);
-  const scale=Math.min((W2-40)/cv.width,340/cv.height),sw=cv.width*scale,sh=cv.height*scale;
-  c2.strokeStyle=dark?'#252930':'#dee2e6';c2.lineWidth=1;c2.strokeRect(20,80,W2-40,sh+4);c2.drawImage(cv,20,82,sw,sh);
-  let y=82+sh+30;
-  function row2(lbl,val,col){c2.fillStyle=dark?'#1e2228':'#f8f9fa';c2.fillRect(20,y-2,W2-40,20);c2.font='11px Segoe UI,sans-serif';c2.fillStyle=dark?'#7a8494':'#6b7280';c2.textAlign='left';c2.textBaseline='middle';c2.fillText(lbl,28,y+8);c2.font='bold 11px Segoe UI,sans-serif';c2.fillStyle=col||'#374151';c2.textAlign='right';c2.fillText(val,W2-28,y+8);y+=22;}
-  function sec2(t){y+=8;c2.fillStyle=dark?'#252930':'#e7f5ff';c2.fillRect(20,y,W2-40,22);c2.fillStyle='#1971c2';c2.fillRect(20,y,4,22);c2.font='bold 11px Segoe UI,sans-serif';c2.fillStyle='#1971c2';c2.textAlign='left';c2.textBaseline='middle';c2.fillText(t.toUpperCase(),30,y+11);y+=26;}
-  sec2('Nodes');nodes.filter(n=>n.type!=='valve'&&n.type!=='note').forEach(n=>{row2((n.cl||n.label)+' ('+n.type+')',n.rP!==undefined?pd(n.rP):'—',n.type==='outlet'?'#2f9e44':'#374151');});
-  sec2('Pipes');pipes.forEach((p,i)=>{if(!p.nA||!p.nB)return;row2(`Pipe ${i+1}: Ø${p.dia||25}mm / ${p.len||10}m`,`${p.fls!==undefined?fd(p.fls):'—'} · v=${p.vel!==undefined?p.vel.toFixed(2):'—'}m/s · ΔH=${(p.hL||0).toFixed(2)}m`,p.vel>2.4?'#e03131':p.vel>1.2?'#2f9e44':'#1971c2');});
-  if(calc){sec2('Summary');row2('System Status',nodes.filter(n=>n.type==='outlet').every(o=>o.rP>=(o.rbar||1.5))?'✓ OK':'✗ Check pressure','#2f9e44');}
-  c2.fillStyle=dark?'#1e2228':'#f1f3f5';c2.fillRect(0,H2-36,W2,36);c2.font='10px Segoe UI,sans-serif';c2.fillStyle='#9ca3af';c2.textAlign='center';c2.textBaseline='middle';c2.fillText('Hydraulic P&ID v14 — MEP Professional Report',W2/2,H2-18);
-  const a=document.createElement('a');a.download=(cur?.name||'hydraulic')+'_report_'+Date.now()+'.png';a.href=off.toDataURL('image/png',1.0);a.click();
-  showFlash('⬇ Report exported','var(--orange)');
+  const projName=cur?.name||'Untitled Project';
+  const genDate=new Date().toLocaleString();
+  const outlets=nodes.filter(n=>n.type==='outlet');
+  const allOk=calc&&outlets.length>0&&outlets.every(o=>o.rP!==undefined&&o.rP>=(o.rbar||1.5));
+  const anyCalc=calc&&outlets.some(o=>o.rP!==undefined);
+
+  function statusOf(o){
+    if(o.rP===undefined)return{txt:'—',col:GREY};
+    const r=o.rbar||1.5;
+    if(o.rP>=r)return{txt:'OK',col:GREEN};
+    if(o.rP>=r*.7)return{txt:'LOW',col:ORANGE};
+    return{txt:'CRITICAL',col:RED};
+  }
+  function velStatus(v){
+    if(v===undefined)return{txt:'—',col:GREY};
+    if(v>2.4)return{txt:'HIGH',col:RED};
+    if(v>=1.2)return{txt:'OK',col:GREEN};
+    return{txt:'LOW',col:BLUE};
+  }
+
+  // Header band (drawn on every page)
+  function drawHeader(){
+    doc.setFillColor(...BLUE);doc.rect(0,0,PW,22,'F');
+    doc.setFont('helvetica','bold');doc.setFontSize(15);doc.setTextColor(255,255,255);
+    doc.text('HYDRAULIC & PLUMBING SCHEMATIC REPORT',MX,10);
+    doc.setFont('helvetica','normal');doc.setFontSize(9);
+    doc.text('Project: '+projName,MX,17);
+    doc.setFontSize(8);doc.text('Generated: '+genDate,PW-MX,10,{align:'right'});
+    doc.text('Hydraulic P&ID — MEP Professional Suite',PW-MX,17,{align:'right'});
+  }
+  function drawFooter(pageNum,pageCount){
+    doc.setDrawColor(...LGREY);doc.setLineWidth(.2);doc.line(MX,PH-14,PW-MX,PH-14);
+    doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...GREY);
+    doc.text('Confidential — for project use only',MX,PH-9);
+    doc.text('Page '+pageNum+' of '+pageCount,PW-MX,PH-9,{align:'right'});
+  }
+
+  drawHeader();
+  let y=30;
+
+  // Project info box
+  doc.setFillColor(...LGREY);doc.roundedRect(MX,y,PW-2*MX,18,1.5,1.5,'F');
+  doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(...DARK);
+  const infoY=y+7,colW=(PW-2*MX)/4;
+  const infos=[['Nodes',nodes.length],['Pipes',pipes.length],['Pressure Unit',pl()],['Flow Unit',fl()]];
+  infos.forEach((it,i)=>{
+    const cx=MX+8+i*colW;
+    doc.setTextColor(...GREY);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.text(it[0].toUpperCase(),cx,infoY);
+    doc.setTextColor(...DARK);doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text(String(it[1]),cx,infoY+6);
+  });
+  y+=24;
+
+  // Schematic image
+  if(cv&&cv.width>0){
+    const maxW=PW-2*MX,maxH=105;
+    const scale=Math.min(maxW/cv.width,maxH/cv.height);
+    const iw=cv.width*scale,ih=cv.height*scale,ix=MX+(maxW-iw)/2;
+    doc.setDrawColor(...LGREY);doc.setLineWidth(.3);doc.rect(ix-1,y-1,iw+2,ih+2);
+    try{
+      const imgData=cv.toDataURL('image/png',1.0);
+      doc.addImage(imgData,'PNG',ix,y,iw,ih);
+    }catch(e){}
+    y+=ih+5;
+    doc.setFont('helvetica','italic');doc.setFontSize(8);doc.setTextColor(...GREY);
+    doc.text('Figure 1 — System Schematic Diagram',PW/2,y,{align:'center'});
+    y+=8;
+  }
+
+  // Section title helper
+  function sectionTitle(t){
+    doc.setFillColor(...BLUE);doc.rect(MX,y,3,6,'F');
+    doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.setTextColor(...DARK);
+    doc.text(t.toUpperCase(),MX+6,y+4.5);
+    y+=10;
+  }
+
+  const pageHook={
+    didDrawPage: function(){ drawHeader(); }
+  };
+
+  // Nodes table
+  const nodeRows=nodes.filter(n=>n.type!=='valve'&&n.type!=='note').map(n=>{
+    const st=n.type==='outlet'?statusOf(n):{txt:'—',col:GREY};
+    return[n.cl||n.label||'-',n.type,n.rP!==undefined?pd(n.rP):'—',st.txt];
+  });
+  if(nodeRows.length){
+    sectionTitle('Node Summary');
+    doc.autoTable({
+      startY:y,margin:{left:MX,right:MX,top:26,bottom:18},
+      head:[['Node','Type','Pressure','Status']],
+      body:nodeRows.map(r=>[r[0],r[1],r[2],r[3]]),
+      theme:'striped',
+      headStyles:{fillColor:BLUE,textColor:255,fontStyle:'bold',fontSize:8.5},
+      bodyStyles:{fontSize:8,textColor:DARK},
+      alternateRowStyles:{fillColor:[248,249,250]},
+      columnStyles:{3:{fontStyle:'bold',halign:'center'}},
+      didParseCell:function(data){
+        if(data.section==='body'&&data.column.index===3){
+          const row=nodeRows[data.row.index];
+          const st=row[3];
+          const col=st==='OK'?GREEN:st==='LOW'?ORANGE:st==='CRITICAL'?RED:GREY;
+          data.cell.styles.textColor=col;
+        }
+      },
+      ...pageHook
+    });
+    y=doc.lastAutoTable.finalY+10;
+  }
+
+  // Pipes table
+  const pipeRows=pipes.filter(p=>p.nA&&p.nB).map((p,i)=>{
+    const vs=velStatus(p.vel);
+    return[
+      'P'+(i+1),
+      (p.nA.cl||p.nA.label||'-')+' → '+(p.nB.cl||p.nB.label||'-'),
+      (p.dia||25)+' mm',
+      (p.len||10)+' m',
+      p.fls!==undefined?fd(p.fls):'—',
+      p.vel!==undefined?p.vel.toFixed(2)+' m/s':'—',
+      (p.hL||0).toFixed(2)+' m',
+      vs.txt
+    ];
+  });
+  if(pipeRows.length){
+    if(y>PH-50){doc.addPage();drawHeader();y=30;}
+    sectionTitle('Pipe Network Summary');
+    doc.autoTable({
+      startY:y,margin:{left:MX,right:MX,top:26,bottom:18},
+      head:[['Pipe','Route','Ø','Length','Flow','Velocity','Head Loss','Status']],
+      body:pipeRows,
+      theme:'striped',
+      headStyles:{fillColor:BLUE,textColor:255,fontStyle:'bold',fontSize:8},
+      bodyStyles:{fontSize:7.5,textColor:DARK},
+      alternateRowStyles:{fillColor:[248,249,250]},
+      columnStyles:{7:{fontStyle:'bold',halign:'center'}},
+      didParseCell:function(data){
+        if(data.section==='body'&&data.column.index===7){
+          const st=pipeRows[data.row.index][7];
+          const col=st==='OK'?GREEN:st==='LOW'?BLUE:st==='HIGH'?RED:GREY;
+          data.cell.styles.textColor=col;
+        }
+      },
+      ...pageHook
+    });
+    y=doc.lastAutoTable.finalY+10;
+  }
+
+  // Summary box
+  if(y>PH-40){doc.addPage();drawHeader();y=30;}
+  sectionTitle('System Summary');
+  const boxH=22;
+  doc.setDrawColor(...LGREY);doc.setLineWidth(.3);doc.roundedRect(MX,y,PW-2*MX,boxH,1.5,1.5,'S');
+  const stCol=!anyCalc?GREY:allOk?GREEN:RED;
+  const stTxt=!anyCalc?'NOT CALCULATED':allOk?'✓ ALL OUTLETS WITHIN REQUIRED PRESSURE':'✗ ONE OR MORE OUTLETS BELOW REQUIRED PRESSURE';
+  doc.setFillColor(...stCol);doc.circle(MX+8,y+11,3,'F');
+  doc.setFont('helvetica','bold');doc.setFontSize(9.5);doc.setTextColor(...stCol);
+  doc.text(stTxt,MX+15,y+9);
+  const highVelCount=pipes.filter(p=>p.vel!==undefined&&p.vel>2.4).length;
+  const lowPressCount=outlets.filter(o=>o.rP!==undefined&&o.rP<(o.rbar||1.5)).length;
+  doc.setFont('helvetica','normal');doc.setFontSize(8);doc.setTextColor(...GREY);
+  doc.text('High-velocity pipes (>2.4 m/s): '+highVelCount+'    ·    Outlets below required pressure: '+lowPressCount,MX+15,y+16);
+  y+=boxH+6;
+
+  // Footers on all pages
+  const pageCount=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pageCount;i++){doc.setPage(i);drawFooter(i,pageCount);}
+
+  doc.save((projName||'hydraulic')+'_report_'+Date.now()+'.pdf');
+  showFlash('⬇ PDF report exported','var(--orange)');
 };
 
 // ── INIT ──────────────────────────────────────────────────
